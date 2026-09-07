@@ -1,4 +1,4 @@
-# agent-fuel-graph — FUEL subgraph (canonical wNEWS/USDC pool, Base)
+# agent-fuel — FUEL subgraph (canonical wNEWS/USDC pool, Base)
 
 ETHOnline 2026. Indexes the market surface of the canonical wNEWS/USDC
 Uniswap v3 pool on Base (`0x2dd7792966535333bae2f063bdf179f1bed220a4`,
@@ -26,7 +26,7 @@ Wallet note: this is a public subgraph — `ownerClass` is always
 ```
 npm install
 npx graph codegen && npx graph build
-npx graph deploy agent-fuel-graph   # needs Subgraph Studio auth
+npx graph deploy agent-fuel   # needs Subgraph Studio auth
 ```
 
 Market data composition: pool-level DEX metrics that a standardized

@@ -1,6 +1,6 @@
 specVersion: 1.0.0
 description: FUEL — market surface of the canonical wNEWS/USDC pool on Base
-repository: https://github.com/FludAI/agent-fuel-graph
+repository: https://github.com/FludAI/agent-fuel
 schema:
   file: ./schema.graphql
 dataSources:
