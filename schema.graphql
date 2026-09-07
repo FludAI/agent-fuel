@@ -15,6 +15,7 @@ type Pool @entity(immutable: false) {
   feeTier: Int!
   createdAtBlock: BigInt!
   swapCount: BigInt!
+  lastSpot: BigDecimal!             # spot after the most recent swap
 }
 
 type Wallet @entity(immutable: false) {

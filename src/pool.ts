@@ -27,6 +27,7 @@ function loadPool(block: BigInt): Pool {
     pool.feeTier = FEE_TIER;
     pool.createdAtBlock = BigInt.fromI32(CREATED_AT);
     pool.swapCount = BigInt.zero();
+    pool.lastSpot = BigDecimal.zero();
   }
   return pool;
 }
@@ -54,7 +55,7 @@ function spotFromSqrtPrice(sqrtPriceX96: BigInt): BigDecimal {
 export function handleSwap(event: SwapEvent): void {
   let pool = loadPool(event.block.number);
   pool.swapCount = pool.swapCount.plus(BigInt.fromI32(1));
-  pool.save();
+  let poolPrevSpot = pool.lastSpot;
 
   let wallet = loadWallet(event.params.sender.toHexString(), event.block.number);
   wallet.swapCount = wallet.swapCount.plus(BigInt.fromI32(1));
@@ -65,11 +66,12 @@ export function handleSwap(event: SwapEvent): void {
   let wnewsDelta = event.params.amount1.toBigDecimal().div(WNEWS_SCALE);
   let spotAfter = spotFromSqrtPrice(event.params.sqrtPriceX96);
 
-  // Impact of this print: move vs the previous snapshot spot (bps).
+  // Impact of this print: move vs the previous swap's spot, however long
+  // ago it was (sparse pool: bucket-local comparison would zero most prints).
   let hour = event.block.timestamp.toI64() / 3600;
   let bucketId = hour.toString();
   let snap = MetricsSnapshot.load(bucketId);
-  let prevSpot = snap != null ? snap.spot : spotAfter;
+  let prevSpot = poolPrevSpot.gt(BigDecimal.zero()) ? poolPrevSpot : spotAfter;
 
   let impactBps = 0;
   if (prevSpot.gt(BigDecimal.zero())) {
@@ -89,6 +91,9 @@ export function handleSwap(event: SwapEvent): void {
   swap.spotAfter = spotAfter;
   swap.printImpactBps = impactBps;
   swap.save();
+
+  pool.lastSpot = spotAfter;
+  pool.save();
 
   if (snap == null) {
     snap = new MetricsSnapshot(bucketId);
