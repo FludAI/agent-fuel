@@ -1,0 +1,29 @@
+specVersion: 1.0.0
+description: FUEL — market surface of the canonical wNEWS/USDC pool on Base
+repository: https://github.com/FludAI/fuel-graph
+schema:
+  file: ./schema.graphql
+dataSources:
+  - kind: ethereum
+    name: WNewsUsdcPool
+    network: base
+    source:
+      address: "0x2dd7792966535333bae2f063bdf179f1bed220a4"
+      abi: UniswapV3Pool
+      startBlock: 45499342
+    mapping:
+      kind: ethereum/events
+      apiVersion: 0.0.7
+      language: wasm/assemblyscript
+      entities:
+        - Pool
+        - Wallet
+        - Swap
+        - MetricsSnapshot
+      abis:
+        - name: UniswapV3Pool
+          file: ./abis/UniswapV3Pool.json
+      eventHandlers:
+        - event: Swap(indexed address,indexed address,int256,int256,uint160,uint128,int24)
+          handler: handleSwap
+      file: ./src/pool.ts
