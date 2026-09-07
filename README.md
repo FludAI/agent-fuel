@@ -32,3 +32,9 @@ npx graph deploy agent-fuel   # needs Subgraph Studio auth
 Market data composition: pool-level DEX metrics that a standardized
 schema already covers are consumed from the Messari standardized
 Uniswap v3 subgraph; this subgraph indexes only what is unique to FUEL.
+
+## Notices
+
+© 2026 FludAI / viability.news. Code licensed MIT. FUEL builds on
+patent-pending viability-grading technology (U.S. patent applications
+filed); no patent rights are granted by the code license.
