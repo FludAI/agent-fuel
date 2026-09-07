@@ -1,0 +1,18 @@
+{
+  "_note": "DEMO PLACEHOLDER parameters. The spec marks these 'founder to set' (FUEL-SPEC §6); production calibration is private and never ships in this repo.",
+  "phi": 0.15,
+  "mu": 1.5,
+  "delta0": 0.6,
+  "waterfall": { "delta": 0.4, "pi": 0.2, "rho": 0.4 },
+  "stakingRateAnnual": 0.12,
+  "fundedMonthsDefault": 6,
+  "baselineOdds": 0.001,
+  "gradeMultipliers_PLACEHOLDER": {
+    "measured": 200,
+    "reconciled": 80,
+    "declared": 20,
+    "modeled": 5,
+    "detected": 1
+  },
+  "fundableGrades": ["measured", "reconciled"]
+}
