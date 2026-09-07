@@ -1,0 +1,90 @@
+# FUEL subgraph — market side of the canonical wNEWS/USDC pool (Base).
+# Design rule: every entity that touches treatment assignment records the
+# mechanism and the decision-time state, so counterfactual comparisons can
+# be reconstructed later. Identification is preserved at write time or
+# lost forever.
+#
+# Wallet classification note: this is a public subgraph. ownerClass is
+# always written as UNCLASSIFIED here; any enrichment happens off-chain
+# and is never published.
+
+type Pool @entity(immutable: false) {
+  id: ID!                          # pool address
+  token0: Bytes!                   # USDC
+  token1: Bytes!                   # wNEWS
+  feeTier: Int!
+  createdAtBlock: BigInt!
+  swapCount: BigInt!
+}
+
+type Wallet @entity(immutable: false) {
+  id: ID!                          # address
+  ownerClass: String!              # always UNCLASSIFIED in the public subgraph
+  swapCount: BigInt!
+  firstSeenBlock: BigInt!
+}
+
+type Swap @entity(immutable: true) {
+  id: ID!                          # txHash-logIndex
+  timestamp: BigInt!
+  block: BigInt!
+  sender: Wallet!
+  recipient: Bytes!
+  usdcDelta: BigDecimal!           # + = USDC into pool (buy of wNEWS)
+  wnewsDelta: BigDecimal!
+  spotAfter: BigDecimal!           # USDC per wNEWS after this swap
+  printImpactBps: Int!             # |spot move| this print caused, in bps
+}
+
+# Hourly rollup. credibility = largest single USDC-notional sell in the
+# hour that printed under 5% impact (denomination credibility: how much
+# size the book absorbs without moving the print).
+type MetricsSnapshot @entity(immutable: false) {
+  id: ID!                          # hour bucket
+  timestamp: BigInt!               # bucket start
+  spot: BigDecimal!                # last spot in bucket
+  spotHigh: BigDecimal!
+  spotLow: BigDecimal!
+  volumeUsdc: BigDecimal!
+  swapCount: Int!
+  credibility: BigDecimal!         # see rollup rule above
+  maxSellImpactBps: Int!
+}
+
+# ---------- business side (FUEL engagements; populated when the FUEL
+# contracts land — schema declared now so the API shape is stable) ----------
+
+type Business @entity(immutable: false) {
+  id: ID!                          # platform id (viability.news)
+  sectorBand: String               # coarse bands only
+  sizeBand: String
+  gradings: [Grading!]! @derivedFrom(field: "business")
+  assignments: [AssignmentEvent!]! @derivedFrom(field: "business")
+}
+
+type Grading @entity(immutable: true) {
+  id: ID!
+  business: Business!
+  timestamp: BigInt!
+  grade: String!                   # measured | reconciled | declared | modeled | detected
+  impliedOdds: BigDecimal!
+  evidenceJson: String!
+  graderVersion: String!
+}
+
+# One row per assignment decision, funded or not — the graded-but-unfunded
+# cohort is observed symmetrically with the funded one.
+type AssignmentEvent @entity(immutable: true) {
+  id: ID!
+  business: Business!
+  timestamp: BigInt!
+  gradeAtDecision: String!
+  eligible: Boolean!
+  assigned: Boolean!
+  mechanism: String!               # capacity | queue | dev-availability | randomized | discretionary
+  slotsAvailable: Int!
+  eligiblePoolSize: Int!
+  queuePosition: Int
+  randomSeed: Bytes
+  reasonCode: String!
+}
