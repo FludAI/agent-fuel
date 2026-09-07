@@ -1,11 +1,11 @@
 {
-  "name": "fuel-graph",
+  "name": "agent-fuel-graph",
   "version": "0.1.0",
   "private": true,
   "scripts": {
     "codegen": "graph codegen",
     "build": "graph build",
-    "deploy": "graph deploy fuel-graph"
+    "deploy": "graph deploy agent-fuel-graph"
   },
   "dependencies": {
     "@graphprotocol/graph-cli": "0.97.1",
