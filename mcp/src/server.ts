@@ -1,0 +1,265 @@
+/**
+ * FUEL MCP server — ETHOnline 2026 (The Graph, AI track, from scratch).
+ *
+ * Five tools over two live Graph data sources:
+ *  - agent-fuel subgraph (custom, this repo): swaps, hourly metrics,
+ *    denomination credibility on the canonical wNEWS/USDC pool (Base).
+ *  - Messari standardized Uniswap v3 Base subgraph (decentralized
+ *    network): pool TVL / volume / swap counts — standardized schema,
+ *    zero custom DEX indexing.
+ *
+ * Business-side entities (engagements, interventions) populate when the
+ * FUEL contracts land on testnet; until then those fields are served as
+ * clearly-labeled fixtures.
+ */
+import { McpServer } from "@modelcontextprotocol/sdk/server/mcp.js";
+import { StdioServerTransport } from "@modelcontextprotocol/sdk/server/stdio.js";
+import { z } from "zod";
+import { readFileSync } from "node:fs";
+import { dirname, join } from "node:path";
+import { fileURLToPath } from "node:url";
+
+const HERE = dirname(fileURLToPath(import.meta.url));
+const PARAMS = JSON.parse(readFileSync(join(HERE, "..", "params.json"), "utf8"));
+
+const FUEL_SUBGRAPH =
+  process.env.FUEL_SUBGRAPH_URL ??
+  "https://api.studio.thegraph.com/query/1758890/agent-fuel/v0.1.1";
+const MESSARI_UNIV3_BASE_ID = "FUbEPQw1oMghy39fwWBFY5fE6MXPXZQtjncQy2cXdrNS";
+const POOL = "0x2dd7792966535333bae2f063bdf179f1bed220a4";
+
+function messariUrl(): string {
+  const key = process.env.GRAPH_API_KEY;
+  if (!key) throw new Error("GRAPH_API_KEY not set (see .env)");
+  return `https://gateway.thegraph.com/api/${key}/subgraphs/id/${MESSARI_UNIV3_BASE_ID}`;
+}
+
+async function gql(url: string, query: string): Promise<any> {
+  const res = await fetch(url, {
+    method: "POST",
+    headers: { "Content-Type": "application/json" },
+    body: JSON.stringify({ query }),
+  });
+  const body = (await res.json()) as any;
+  if (body.errors) throw new Error(JSON.stringify(body.errors));
+  return body.data;
+}
+
+const server = new McpServer({ name: "fuel-mcp", version: "0.1.0" });
+
+server.tool(
+  "get_credibility",
+  "Denomination credibility of the canonical wNEWS/USDC pool: how much " +
+    "sell size the book absorbs while printing under 5% impact, plus spot " +
+    "trend. Source: agent-fuel subgraph (live).",
+  { hours: z.number().int().min(1).max(720).default(72) },
+  async ({ hours }) => {
+    const d = await gql(
+      FUEL_SUBGRAPH,
+      `{ pools { lastSpot swapCount }
+         metricsSnapshots(first: ${hours}, orderBy: timestamp, orderDirection: desc) {
+           timestamp spot credibility maxSellImpactBps volumeUsdc swapCount } }`
+    );
+    const snaps = d.metricsSnapshots;
+    const best = snaps.reduce(
+      (m: number, s: any) => Math.max(m, parseFloat(s.credibility)),
+      0
+    );
+    return {
+      content: [
+        {
+          type: "text",
+          text: JSON.stringify(
+            {
+              spot_usdc_per_wnews: d.pools[0]?.lastSpot ?? null,
+              credibility_best_usdc: best,
+              interpretation:
+                "largest single sell in the window that printed <5% impact",
+              window_hours: hours,
+              active_hours: snaps.length,
+              lifetime_swaps: d.pools[0]?.swapCount ?? "0",
+              recent: snaps.slice(0, 10),
+            },
+            null,
+            2
+          ),
+        },
+      ],
+    };
+  }
+);
+
+server.tool(
+  "get_company_status",
+  "Market + engagement status. Market side is live (Messari standardized " +
+    "Uniswap v3 subgraph + agent-fuel subgraph); engagement side is a " +
+    "labeled fixture until the FUEL contracts land.",
+  {},
+  async () => {
+    const [mkt, own] = await Promise.all([
+      gql(
+        messariUrl(),
+        `{ liquidityPool(id: "${POOL}") {
+             name totalValueLockedUSD cumulativeSwapCount
+             cumulativeVolumeUSD inputTokenBalances
+             inputTokens { symbol decimals } } }`
+      ),
+      gql(FUEL_SUBGRAPH, `{ pools { lastSpot swapCount } }`),
+    ]);
+    return {
+      content: [
+        {
+          type: "text",
+          text: JSON.stringify(
+            {
+              market: {
+                source: "messari-standardized + agent-fuel (both live)",
+                pool: mkt.liquidityPool,
+                spot_usdc_per_wnews: own.pools[0]?.lastSpot ?? null,
+              },
+              engagements: {
+                source: "FIXTURE — FUEL contracts not yet deployed",
+                active: 0,
+                graded_unfunded_cohort: 0,
+              },
+            },
+            null,
+            2
+          ),
+        },
+      ],
+    };
+  }
+);
+
+server.tool(
+  "get_threat_report",
+  "Recent prints ranked by impact: large sells, drawdowns, and absorption " +
+    "on the canonical pool. Source: agent-fuel subgraph (live).",
+  { topN: z.number().int().min(1).max(50).default(10) },
+  async ({ topN }) => {
+    const d = await gql(
+      FUEL_SUBGRAPH,
+      `{ swaps(first: 200, orderBy: timestamp, orderDirection: desc) {
+           timestamp usdcDelta wnewsDelta spotAfter printImpactBps } }`
+    );
+    const swaps = d.swaps as any[];
+    const sells = swaps.filter((s) => parseFloat(s.wnewsDelta) > 0);
+    const ranked = [...swaps]
+      .sort((a, b) => b.printImpactBps - a.printImpactBps)
+      .slice(0, topN);
+    return {
+      content: [
+        {
+          type: "text",
+          text: JSON.stringify(
+            {
+              window_swaps: swaps.length,
+              sells: sells.length,
+              highest_impact_prints: ranked,
+              note: "printImpactBps is print-vs-previous-print; the candle, not the notional",
+            },
+            null,
+            2
+          ),
+        },
+      ],
+    };
+  }
+);
+
+server.tool(
+  "get_allocation_quote",
+  "FUEL engagement quote per FUEL-SPEC §2, computed on the LIVE print " +
+    "from the canonical pool. Grade-gated: only fundable grades get fuel. " +
+    "Parameters are demo placeholders (params.json); production " +
+    "calibration is private.",
+  {
+    grade: z.enum(["measured", "reconciled", "declared", "modeled", "detected"]),
+    market_cost_usd: z.number().positive(),
+    dev_runrate_usd_month: z.number().positive(),
+    funded_months: z.number().int().min(1).max(24).optional(),
+  },
+  async ({ grade, market_cost_usd, dev_runrate_usd_month, funded_months }) => {
+    const d = await gql(FUEL_SUBGRAPH, `{ pools { lastSpot } }`);
+    const P = parseFloat(d.pools[0]?.lastSpot ?? "0");
+    if (P <= 0) throw new Error("no live print available");
+
+    const p = PARAMS;
+    const T = funded_months ?? p.fundedMonthsDefault;
+    const pg = p.baselineOdds * p.gradeMultipliers_PLACEHOLDER[grade];
+    const fundable = p.fundableGrades.includes(grade);
+    const F = p.phi * market_cost_usd;
+    const rMonthly = p.stakingRateAnnual / 12;
+    const gap = Math.max(0, dev_runrate_usd_month - p.delta0 * F);
+    const stakePerMonth = gap / (rMonthly * P);
+    const expectedTokenCost = (stakePerMonth * T) / pg;
+    const premium = p.mu * market_cost_usd;
+
+    return {
+      content: [
+        {
+          type: "text",
+          text: JSON.stringify(
+            {
+              live_print_usdc_per_wnews: P,
+              grade,
+              implied_odds: pg,
+              fundable,
+              quote: fundable
+                ? {
+                    cash_fee_usdc: F,
+                    stake_wnews_per_month: stakePerMonth,
+                    funded_months: T,
+                    expected_token_cost_wnews: expectedTokenCost,
+                    success_premium_usdc: premium,
+                    premium_waterfall: p.waterfall,
+                    all_in_cost_multiple: p.phi + p.mu,
+                  }
+                : null,
+              refusal_reason: fundable
+                ? null
+                : `grade '${grade}' below fundable gate at current print (expected token cost diverges: ${expectedTokenCost.toExponential(2)} wNEWS)`,
+              params_note: p._note,
+            },
+            null,
+            2
+          ),
+        },
+      ],
+    };
+  }
+);
+
+server.tool(
+  "get_intervention_response",
+  "Observed market response to a protocol intervention (pre-registered " +
+    "prediction vs realized). FIXTURE until Intervention events are " +
+    "emitted on-chain; shape matches the subgraph schema.",
+  {},
+  async () => ({
+    content: [
+      {
+        type: "text",
+        text: JSON.stringify(
+          {
+            source: "FIXTURE — no Intervention events on-chain yet",
+            schema_ready: true,
+            example_shape: {
+              kind: "mint-bid",
+              spotBefore: "0.0287",
+              predictedResponseJson: "written BEFORE outcome",
+              realized: "populated by subgraph when events land",
+            },
+          },
+          null,
+          2
+        ),
+      },
+    ],
+  })
+);
+
+const transport = new StdioServerTransport();
+await server.connect(transport);
+console.error("fuel-mcp: 5 tools on stdio (2 subgraph sources live)");
