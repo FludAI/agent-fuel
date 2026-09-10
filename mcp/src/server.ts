@@ -41,6 +41,50 @@ function messariUrl(): string {
   return `https://gateway.thegraph.com/api/${key}/subgraphs/id/${MESSARI_UNIV3_BASE_ID}`;
 }
 
+// Real cash-leg lifecycle from Stripe (restricted read-only key) —
+// initiated/pending/settled with Stripe's own available_on as the
+// settlement date. Coarse fields only; absent key => null (fixture mode).
+async function stripeCashLegs(): Promise<any | null> {
+  const key = process.env.STRIPE_KEY;
+  if (!key) return null;
+  const api = async (path: string) => {
+    const r = await fetch(`https://api.stripe.com/v1/${path}`, {
+      headers: { Authorization: `Bearer ${key}` },
+    });
+    const j = (await r.json()) as any;
+    if (j.error) throw new Error(j.error.message);
+    return j;
+  };
+  const charges = await api("charges?limit=10");
+  const now = Math.floor(Date.now() / 1000);
+  const legs = [];
+  for (const c of charges.data) {
+    if (c.status !== "succeeded") continue;
+    const bt = c.balance_transaction
+      ? await api(`balance_transactions/${c.balance_transaction}`)
+      : null;
+    legs.push({
+      provider: "stripe",
+      reference: c.id,
+      amount_usd: c.amount / 100,
+      initiated_at: new Date(c.created * 1000).toISOString(),
+      expected_settlement: bt ? new Date(bt.available_on * 1000).toISOString() : null,
+      status: bt && bt.available_on <= now ? "settled" : "pending",
+      net_after_fees_usd: bt ? bt.net / 100 : null,
+    });
+  }
+  const unsettled = legs.filter((l) => l.status === "pending")
+    .reduce((s, l) => s + l.amount_usd, 0);
+  const cap = (PARAMS as any).settlementFloatCapUsd ?? null;
+  return {
+    source: "stripe-live",
+    cash_legs: legs,
+    unsettled_total_usd: unsettled,
+    settlement_float_cap_usd: cap,
+    within_float_cap: cap == null ? null : unsettled <= cap,
+  };
+}
+
 async function gql(url: string, query: string): Promise<any> {
   const res = await fetch(url, {
     method: "POST",
@@ -128,6 +172,9 @@ server.tool(
                 source: "FIXTURE — FUEL contracts not yet deployed",
                 active: 0,
                 graded_unfunded_cohort: 0,
+              },
+              cash: (await stripeCashLegs()) ?? {
+                source: "FIXTURE — no STRIPE_KEY in env",
               },
             },
             null,
