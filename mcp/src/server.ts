@@ -20,7 +20,14 @@ import { dirname, join } from "node:path";
 import { fileURLToPath } from "node:url";
 
 const HERE = dirname(fileURLToPath(import.meta.url));
-const PARAMS = JSON.parse(readFileSync(join(HERE, "..", "params.json"), "utf8"));
+// params.local.json (gitignored) overrides the committed demo placeholders —
+// real calibration is loaded at runtime and never enters the repo.
+const PARAMS = (() => {
+  for (const f of ["params.local.json", "params.json"]) {
+    try { return JSON.parse(readFileSync(join(HERE, "..", f), "utf8")); } catch {}
+  }
+  throw new Error("no params file found");
+})();
 
 const FUEL_SUBGRAPH =
   process.env.FUEL_SUBGRAPH_URL ??
