@@ -21,6 +21,17 @@ FUEL business-side schema the MCP server consumes.
 Wallet note: this is a public subgraph — `ownerClass` is always
 `UNCLASSIFIED` here by design.
 
+## Live endpoints
+
+- **MCP (Streamable HTTP):** `https://fuel-mcp-667990366434.us-central1.run.app/mcp`
+  — five tools over two live Graph sources; POST JSON-RPC. Production
+  calibration is injected server-side (Secret Manager); the repo carries
+  demo placeholders only.
+- Subgraph: `https://api.studio.thegraph.com/query/1758890/agent-fuel/v0.1.1`
+- Bridge status/ops/animations: `https://wnews-bridge-667990366434.us-central1.run.app/status/`
+
+Local run (reproducibility path): `cd mcp && npm install && npm start` (stdio).
+
 ## Build & deploy
 
 ```

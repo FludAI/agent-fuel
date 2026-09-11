@@ -23,6 +23,14 @@ const HERE = dirname(fileURLToPath(import.meta.url));
 // params.local.json (gitignored) overrides the committed demo placeholders —
 // real calibration is loaded at runtime and never enters the repo.
 const PARAMS = (() => {
+  if (process.env.PARAMS_JSON) {
+    try { return JSON.parse(process.env.PARAMS_JSON); }
+    catch (e) { console.error("PARAMS_JSON parse failed:", e); }
+  }
+  if (process.env.PARAMS_PATH) {
+    try { return JSON.parse(readFileSync(process.env.PARAMS_PATH, "utf8")); }
+    catch (e) { console.error("PARAMS_PATH read failed:", e); }
+  }
   for (const f of ["params.local.json", "params.json"]) {
     try { return JSON.parse(readFileSync(join(HERE, "..", f), "utf8")); } catch {}
   }
@@ -96,6 +104,9 @@ async function gql(url: string, query: string): Promise<any> {
   return body.data;
 }
 
+// Factory: HTTP mode builds a fresh server+transport per request
+// (stateless Streamable HTTP); stdio mode builds one.
+function buildServer(): McpServer {
 const server = new McpServer({ name: "fuel-mcp", version: "0.1.0" });
 
 server.tool(
@@ -314,6 +325,32 @@ server.tool(
   })
 );
 
-const transport = new StdioServerTransport();
-await server.connect(transport);
-console.error("fuel-mcp: 5 tools on stdio (2 subgraph sources live)");
+return server;
+}
+
+if (process.env.MCP_HTTP || process.env.K_SERVICE) {
+  // Hosted mode (Cloud Run): stateless Streamable HTTP on $PORT.
+  const { StreamableHTTPServerTransport } = await import(
+    "@modelcontextprotocol/sdk/server/streamableHttp.js"
+  );
+  const express = (await import("express")).default;
+  const app = express();
+  app.use(express.json({ limit: "1mb" }));
+  app.post("/mcp", async (req, res) => {
+    const s = buildServer();
+    const t = new StreamableHTTPServerTransport({ sessionIdGenerator: undefined });
+    res.on("close", () => { t.close(); s.close(); });
+    await s.connect(t);
+    await t.handleRequest(req, res, req.body);
+  });
+  app.get("/healthz", (_req, res) =>
+    res.json({ ok: true, name: "fuel-mcp", tools: 5, sources: ["agent-fuel subgraph", "messari standardized", "stripe cash-leg"] }));
+  app.use((_req, res) => res.status(404).json({ error: "not found — MCP at POST /mcp" }));
+  const port = Number(process.env.PORT || 8080);
+  app.listen(port, () => console.error(`fuel-mcp: streamable HTTP on :${port}`));
+} else {
+  const server = buildServer();
+  const transport = new StdioServerTransport();
+  await server.connect(transport);
+  console.error("fuel-mcp: 5 tools on stdio (2 subgraph sources live)");
+}
