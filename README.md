@@ -47,5 +47,4 @@ Uniswap v3 subgraph; this subgraph indexes only what is unique to FUEL.
 ## Notices
 
 © 2026 FludAI / viability.news. Code licensed MIT. FUEL builds on
-patent-pending viability-grading technology (U.S. patent applications
-filed); no patent rights are granted by the code license.
+patents pending; no patent rights are granted by the code license.
