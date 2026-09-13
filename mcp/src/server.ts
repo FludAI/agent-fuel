@@ -71,24 +71,26 @@ async function stripeCashLegs(): Promise<any | null> {
     const bt = c.balance_transaction
       ? await api(`balance_transactions/${c.balance_transaction}`)
       : null;
+    // Coarse bands only on a public tool: no charge ids, no per-charge amounts, dates to the day.
     legs.push({
       provider: "stripe",
-      reference: c.id,
-      amount_usd: c.amount / 100,
-      initiated_at: new Date(c.created * 1000).toISOString(),
-      expected_settlement: bt ? new Date(bt.available_on * 1000).toISOString() : null,
+      amount_usd: c.amount / 100,   // used for the totals below; not returned per leg
+      initiated_on: new Date(c.created * 1000).toISOString().slice(0, 10),
+      expected_settlement_on: bt ? new Date(bt.available_on * 1000).toISOString().slice(0, 10) : null,
       status: bt && bt.available_on <= now ? "settled" : "pending",
-      net_after_fees_usd: bt ? bt.net / 100 : null,
     });
   }
-  const unsettled = legs.filter((l) => l.status === "pending")
-    .reduce((s, l) => s + l.amount_usd, 0);
+  const unsettled = legs.filter((l) => l.status === "pending").reduce((s, l) => s + l.amount_usd, 0);
+  const settled = legs.filter((l) => l.status === "settled").reduce((s, l) => s + l.amount_usd, 0);
   const cap = (PARAMS as any).settlementFloatCapUsd ?? null;
+  // the float cap is a reserve-policy parameter: only the verdict leaves the service, never the number
   return {
     source: "stripe-live",
-    cash_legs: legs,
-    unsettled_total_usd: unsettled,
-    settlement_float_cap_usd: cap,
+    window: "last 10 charges",
+    cash_legs: legs.map(({ amount_usd, ...rest }) => rest),
+    counts: { settled: legs.filter((l) => l.status === "settled").length, pending: legs.filter((l) => l.status === "pending").length },
+    settled_total_usd: Math.round(settled),
+    unsettled_total_usd: Math.round(unsettled),
     within_float_cap: cap == null ? null : unsettled <= cap,
   };
 }
