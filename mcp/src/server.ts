@@ -327,6 +327,75 @@ server.tool(
   })
 );
 
+// ---------------------------------------------------------------------------
+
+// get_intervention_statement — one canonical intervention record, six readings.
+
+// The MCP is the controlled interface, not a beneficiary: the record, the
+
+// calculations and the renderings live in the FUEL consent service; this tool
+
+// forwards the request and returns the reading verbatim (record version + hash
+
+// included, so any two audiences can be shown to come from the same record).
+
+// Requires CONSENT_URL and CONSENT_AGENT_TOKEN; without them the tool says so.
+
+// ---------------------------------------------------------------------------
+
+server.tool(
+
+  "get_intervention_statement",
+
+  "The audience-specific reading of one intervention — business, operator, " +
+
+    "agent, steward (core-customer), supporter (capital), attestor — generated " +
+
+    "deterministically from the canonical intervention record. Returns facts, " +
+
+    "calculations, the statement, missing terms, warnings, and the record hash.",
+
+  {
+
+    interventionId: z.string().regex(/^[\w.-]{1,32}$/),
+
+    audience: z.enum(["business", "operator", "agent", "steward", "supporter", "attestor", "all"]).default("business"),
+
+    asOf: z.string().datetime().optional(),
+
+  },
+
+  async ({ interventionId, audience, asOf }) => {
+
+    const url = process.env.CONSENT_URL;
+
+    const token = process.env.CONSENT_AGENT_TOKEN;
+
+    if (!url || !token) {
+
+      return { content: [{ type: "text", text: JSON.stringify({ error: "statement service not configured on this deployment (CONSENT_URL / CONSENT_AGENT_TOKEN)" }) }] };
+
+    }
+
+    const r = await fetch(`${url.replace(/\/$/, "")}/statement`, {
+
+      method: "POST",
+
+      headers: { "Content-Type": "application/json", Authorization: `Bearer ${token}` },
+
+      body: JSON.stringify({ interventionId, audience, asOf }),
+
+    });
+
+    const j = await r.json();
+
+    return { content: [{ type: "text", text: JSON.stringify(j, null, 2) }], ...(r.ok ? {} : { isError: true }) };
+
+  }
+
+);
+
+
 return server;
 }
 
