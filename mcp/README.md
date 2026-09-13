@@ -11,7 +11,7 @@ subgraph indexes only what is unique to FUEL.
 | `get_credibility` | live — denomination credibility from hourly rollups |
 | `get_threat_report` | live — prints ranked by impact |
 | `get_company_status` | live market via Messari + agent-fuel; engagement side labeled FIXTURE until FUEL contracts deploy |
-| `get_allocation_quote` | live print × FUEL-SPEC §2 formula (params.json holds DEMO placeholders; production calibration is private) |
+| `get_allocation_quote` | live print × the FUEL pricing spec formula (params.json holds DEMO placeholders; production calibration is private) |
 | `get_intervention_response` | labeled FIXTURE (schema-ready) |
 
 ## Run

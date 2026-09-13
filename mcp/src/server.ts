@@ -237,7 +237,7 @@ server.tool(
 
 server.tool(
   "get_allocation_quote",
-  "FUEL engagement quote per FUEL-SPEC §2, computed on the LIVE print " +
+  "FUEL engagement quote per the FUEL pricing spec, computed on the LIVE print " +
     "from the canonical pool. Grade-gated: only fundable grades get fuel. " +
     "Parameters are demo placeholders (params.json); production " +
     "calibration is private.",

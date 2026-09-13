@@ -1,5 +1,5 @@
 {
-  "_note": "DEMO PLACEHOLDER parameters. The spec marks these 'founder to set' (FUEL-SPEC §6); production calibration is private and never ships in this repo.",
+  "_note": "DEMO PLACEHOLDER parameters. The spec marks these 'founder to set' (the FUEL pricing spec); production calibration is private and never ships in this repo.",
   "phi": 0.15,
   "mu": 1.5,
   "delta0": 0.6,
